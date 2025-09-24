@@ -64,3 +64,8 @@ No mic sync? Browser needs mic permission; toggle Mic Off→On. Ensure no other 
 Audio silent? Click Start first (user gesture unlocks audio). Check system output + volume slider.
 Discomfort/eye strain? Lower Depth, switch to Wind-down, or turn entrainment Off.
 Gamma (40 Hz) feels edgy? It’s experimental. Use short tests (3–6 min) or avoid entirely.
+
+
+<img width="225" height="512" alt="Settings" src="https://github.com/user-attachments/assets/2817f223-849c-4228-bd22-3b4c78a423f3" />
+
+<img width="256" height="256" alt="Kaleidoscope" src="https://github.com/user-attachments/assets/31221bbd-83b1-4687-b459-5f50a4525bdf" />
