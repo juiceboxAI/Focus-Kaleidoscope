@@ -65,7 +65,7 @@ Audio silent? Click Start first (user gesture unlocks audio). Check system outpu
 Discomfort/eye strain? Lower Depth, switch to Wind-down, or turn entrainment Off.
 Gamma (40 Hz) feels edgy? It’s experimental. Use short tests (3–6 min) or avoid entirely.
 
-Privacy
+Privacy:
 All rendering, mic processing, and audio synthesis happen locally in your browser. No network calls. No logging.
 
 Requirements
