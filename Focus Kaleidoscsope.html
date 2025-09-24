@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Focus Kaleidoscope — V2.1.1 (Brain Hygiene + Audio)</title>
+<style>
+  :root{ --bg:#05060a; --panel: rgba(12,14,17,0.6); --muted:#9aa6af; }
+  html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#e6eef6}
+  canvas{display:block;width:100vw;height:100vh;}
+  .ui{position:fixed;right:16px;top:16px;width:380px;max-width:calc(100vw - 40px);
+      background:var(--panel);border-radius:12px;padding:12px;backdrop-filter:blur(6px);
+      border:1px solid rgba(150,170,255,0.12);box-shadow:0 6px 24px rgba(0,0,0,0.5)}
+  .row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}
+  label{font-size:12px;color:var(--muted)}
+  select,input[type="range"],input[type="number"]{width:100%}
+  .btn{background:transparent;border:1px solid rgba(255,255,255,0.1);padding:6px 10px;border-radius:8px;color:#e6eef6;cursor:pointer}
+  .btn.primary{background:linear-gradient(90deg,#6dd3ff22,#9b7cff22);border:1px solid rgba(150,170,255,0.28)}
+  .small{font-size:12px;color:var(--muted)}
+  .warn{color:#ffcccb;font-weight:600;font-size:12px}
+  .kbd{background:#0e1217;padding:3px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);font-family:ui-monospace,Menlo,Consolas,monospace}
+  .rec{display:inline-flex;align-items:center;gap:6px}
+  .rec .dot{width:8px;height:8px;border-radius:50%;background:#ff4d4f;box-shadow:0 0 10px #ff4d4f}
+  .hud-toggle{position:fixed;left:16px;bottom:16px;background:var(--panel);padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.08)}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div class="ui" id="ui">
+  <!-- Session header -->
+  <div class="row" style="justify-content:space-between">
+    <div>
+      <div class="rec"><span class="dot" id="recDot" style="visibility:hidden"></span>
+        <strong id="sessionLabel">Session Idle</strong>
+      </div>
+      <div class="small" id="elapsed">00:00:00</div>
+    </div>
+    <div>
+      <button class="btn" id="startSession">Start</button>
+      <button class="btn" id="stopSession" disabled>Stop</button>
+    </div>
+  </div>
+
+  <!-- Visual presets -->
+  <div class="row">
+    <div style="flex:1">
+      <label>Preset</label>
+      <select id="preset">
+        <option value="focus">Focus (alpha)</option>
+        <option value="creativity">Creativity (theta/alpha)</option>
+        <option value="winddown">Wind-down (warm)</option>
+        <option value="experimental">Experimental (gamma opt-in)</option>
+      </select>
+    </div>
+    <div style="flex:1">
+      <label>Palette</label>
+      <select id="palette">
+        <option value="morning">Morning — Dawn Teal</option>
+        <option value="creativity">Creativity — Neon Contrast</option>
+        <option value="evening">Evening — Amber Calm</option>
+        <option value="nightdrive">Night Drive — Violet/Indigo</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Visual params -->
+  <div class="row">
+    <div style="flex:1">
+      <label>Symmetry</label>
+      <input id="petals" type="range" min="2" max="48" value="8">
+    </div>
+    <div style="flex:1">
+      <label>Complexity</label>
+      <input id="complexity" type="range" min="1" max="18" value="6">
+    </div>
+    <div style="flex:1">
+      <label>Speed</label>
+      <input id="speed" type="range" min="0" max="3" step="0.05" value="0.6">
+    </div>
+  </div>
+
+  <!-- Entrainment -->
+  <div class="row">
+    <div style="flex:1;min-width:140px">
+      <label>Visual Entrainment (Hz)</label>
+      <select id="hz">
+        <option value="0">Off</option>
+        <option value="6">6 — Deep Calm</option>
+        <option value="8">8 — Alpha Focus</option>
+        <option value="10">10 — Alpha/Beta</option>
+        <option value="20">20 — Alert</option>
+        <option value="40">40 — Gamma (experimental)</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <label>Pulse depth</label>
+      <input id="depth" type="range" min="0" max="1" step="0.01" value="0.18">
+    </div>
+  </div>
+
+  <!-- Breathing -->
+  <div class="row" style="align-items:flex-start">
+    <div style="flex:1">
+      <label>Breathing</label>
+      <div class="small" id="breathStatus">Mode: Off</div>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn" id="micToggle">Mic Sync: Off</button>
+        <button class="btn" id="manualMode">Manual Mode: Off</button>
+        <button class="btn" id="manualInhale" disabled>Tap Inhale</button>
+      </div>
+      <div class="small">Manual Mode = 4–7 cadence (toggle with Tap Inhale). Mic runs locally. </div>
+    </div>
+  </div>
+
+  <!-- Audio entrainment -->
+  <div class="row" style="align-items:flex-start">
+    <div style="flex:1">
+      <label>Audio Entrainment</label>
+      <div class="small" id="audioStatus">Audio: Off</div>
+      <div class="row" style="margin-top:4px">
+        <div style="flex:1">
+          <select id="audioMode">
+            <option value="off">Off</option>
+            <option value="binaural">Binaural (headphones)</option>
+            <option value="isochronic">Isochronic (AM)</option>
+            <option value="pure">Pure + FM (gentle)</option>
+          </select>
+        </div>
+        <div style="width:90px">
+          <input id="audioVol" type="range" min="0" max="1" step="0.01" value="0.15">
+        </div>
+      </div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Carrier (Hz)</label>
+          <input id="carrier" type="number" min="90" max="600" step="1" value="200">
+        </div>
+        <div style="flex:1">
+          <label>Beat (Hz)</label>
+          <input id="beat" type="number" min="0" max="40" step="0.1" value="8">
+        </div>
+      </div>
+      <div class="small">Beat auto-follows visual Hz when not zero; override via Beat field. Binaural = L/R split; Isochronic = amplitude modulation; Pure = single tone with subtle FM by breath/pulse.</div>
+    </div>
+  </div>
+
+  <!-- Pomodoro -->
+  <div class="row">
+    <div style="flex:1">
+      <label>Pomodoro</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="pom25">25m</button>
+        <button class="btn" id="pom5">5m</button>
+        <button class="btn" id="pomStop">Stop</button>
+      </div>
+      <div class="small" id="pomDisplay">Timer: —</div>
+    </div>
+  </div>
+
+  <!-- Safety & controls -->
+  <div class="row"><div class="warn" id="safety">Pulsed light may trigger seizures in photosensitive people. Avoid entrainment if photosensitive. 40Hz is experimental.</div></div>
+  <div class="row" style="justify-content:space-between">
+    <button class="btn primary" id="reset">Reset</button>
+    <div class="small">Shortcuts: <span class="kbd">Space</span> Pause · <span class="kbd">B</span> Mic</div>
+    <button class="btn" id="hideUI">Hide UI</button>
+  </div>
+</div>
+<div class="hud-toggle" id="miniHUD" style="display:none">
+  <button class="btn" id="showUI">Show Controls</button>
+</div>
+
+<script>
+/* ========= Canvas ========= */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha:false });
+function resize(){ cv.width=innerWidth; cv.height=innerHeight; }
+addEventListener('resize', resize); resize();
+
+/* ========= UI refs ========= */
+const ui = {
+  preset: q('#preset'), palette: q('#palette'),
+  petals: q('#petals'), complexity: q('#complexity'), speed: q('#speed'),
+  hz: q('#hz'), depth: q('#depth'),
+  micToggle: q('#micToggle'), manualMode: q('#manualMode'), manualInhale: q('#manualInhale'),
+  breathStatus: q('#breathStatus'),
+  startSession: q('#startSession'), stopSession: q('#stopSession'),
+  sessionLabel: q('#sessionLabel'), elapsed: q('#elapsed'), recDot: q('#recDot'), panel: q('#ui'),
+  pom25: q('#pom25'), pom5: q('#pom5'), pomStop: q('#pomStop'), pomDisplay: q('#pomDisplay'),
+  reset: q('#reset'), hideUI: q('#hideUI'), showUI: q('#showUI'), miniHUD:q('#miniHUD'),
+  safety: q('#safety'),
+  audioMode: q('#audioMode'), audioVol: q('#audioVol'), audioStatus: q('#audioStatus'),
+  carrier: q('#carrier'), beat: q('#beat')
+};
+
+/* ========= State ========= */
+let S = {
+  // visuals
+  t:0, paused:false, petals:8, complexity:6, speed:0.6,
+  palette:'morning', hz:8, depth:0.18,
+  // breathing
+  mic:false, ac:null, analyser:null, data:null, inhaleEnv:0,
+  stream:null, manual:false, manualTimer:null, manualPhase:'exhale',
+  // session/pom
+  session:false, startTs:0, elapsedId:null, pomId:null, pomRemain:0,
+  // audio
+  audioCtx:null, outGain:null, splitter:null, merger:null,
+  leftOsc:null, rightOsc:null, pureOsc:null, modOsc:null, gateGain:null,
+  audioMode:'off', audioVol:0.15, carrier:200, beatOverride:8
+};
+
+/* ========= Preferences ========= */
+const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (prefersReduced) { S.hz = 0; }
+
+/* ========= Palettes ========= */
+function hsl(h,s,l){ return `hsl(${h},${s}%,${l}%)`; }
+const palettes = {
+  morning: (u,t)=>hsl((180+u*60+Math.sin(t*0.002)*8)%360,70,55),
+  creativity:(u,t)=>hsl((300+u*120+Math.cos(t*0.003)*40)%360,85,50),
+  evening:  (u,t)=>hsl((30+Math.sin(t*0.001+u*2)*12)%360,75,48),
+  nightdrive:(u,t)=>hsl((260+u*80+Math.sin(t*0.002)*30)%360,70,42)
+};
+
+/* ========= UI wiring ========= */
+ui.preset.addEventListener('change', ()=>applyPreset(ui.preset.value));
+ui.palette.addEventListener('change', ()=>S.palette=ui.palette.value);
+ui.petals.addEventListener('input', ()=>S.petals=+ui.petals.value);
+ui.complexity.addEventListener('input', ()=>S.complexity=+ui.complexity.value);
+ui.speed.addEventListener('input', ()=>S.speed=+ui.speed.value);
+ui.hz.addEventListener('change', ()=>{ S.hz=+ui.hz.value; updateSafety(); });
+ui.depth.addEventListener('input', ()=>S.depth=+ui.depth.value);
+
+ui.micToggle.addEventListener('click', toggleMic);
+ui.manualMode.addEventListener('click', ()=>toggleManual());
+ui.manualInhale.addEventListener('click', ()=>{ if(S.manual){ S.manualPhase = (S.manualPhase==='inhale'?'exhale':'inhale'); updateBreathStatus(); } });
+
+ui.startSession.addEventListener('click', startSession);
+ui.stopSession.addEventListener('click', stopSession);
+
+ui.pom25.addEventListener('click', ()=>startPom(25*60));
+ui.pom5.addEventListener('click', ()=>startPom(5*60));
+ui.pomStop.addEventListener('click', stopPom);
+
+ui.reset.addEventListener('click', resetAll);
+ui.hideUI.addEventListener('click', ()=>uiShow(false));
+ui.showUI.addEventListener('click', ()=>uiShow(true));
+
+addEventListener('keydown', e=>{
+  if(e.code==='Space'){ S.paused=!S.paused; e.preventDefault(); }
+  if(e.key==='b' || e.key==='B'){ toggleMic(); }
+  if(e.key==='ArrowLeft'){ S.petals=Math.max(2,S.petals-1); ui.petals.value=S.petals; }
+  if(e.key==='ArrowRight'){ S.petals=Math.min(48,S.petals+1); ui.petals.value=S.petals; }
+});
+
+/* ========= Audio wiring ========= */
+ui.audioMode.addEventListener('change', ()=>{ S.audioMode=ui.audioMode.value; ensureAudio(); renderAudioState(); });
+ui.audioVol.addEventListener('input', ()=>{ S.audioVol=+ui.audioVol.value; if(S.outGain) S.outGain.gain.value=S.audioVol; renderAudioState(); });
+ui.carrier.addEventListener('input', ()=>{ S.carrier=+ui.carrier.value; tuneAudio(); });
+ui.beat.addEventListener('input', ()=>{ S.beatOverride=+ui.beat.value; tuneAudio(); });
+
+/* ========= Presets ========= */
+function applyPreset(name){
+  switch(name){
+    case 'focus':       Object.assign(S,{hz:8, depth:0.18, palette:'morning', petals:8, complexity:6, speed:0.6}); break;
+    case 'creativity':  Object.assign(S,{hz:6, depth:0.22, palette:'creativity', petals:10, complexity:8, speed:0.85}); break;
+    case 'winddown':    Object.assign(S,{hz:0, depth:0.12, palette:'evening', petals:6, complexity:4, speed:0.32}); break;
+    case 'experimental':Object.assign(S,{hz:40, depth:0.12, palette:'nightdrive', petals:12, complexity:10, speed:0.9}); break;
+  }
+  ui.hz.value=S.hz; ui.depth.value=S.depth; ui.palette.value=S.palette;
+  ui.petals.value=S.petals; ui.complexity.value=S.complexity; ui.speed.value=S.speed;
+  updateSafety(); tuneAudio(); // keep audio beat aligned
+}
+applyPreset('focus');
+
+/* ========= Session ========= */
+function startSession(){
+  if(S.session) return;
+  S.session=true; S.startTs=Date.now();
+  ui.startSession.disabled=true; ui.stopSession.disabled=false;
+  ui.recDot.style.visibility='visible'; ui.sessionLabel.textContent='Session Active';
+  if(S.elapsedId) clearInterval(S.elapsedId);
+  S.elapsedId=setInterval(()=>{ ui.elapsed.textContent = fmtHHMMSS(((Date.now()-S.startTs)/1000)|0); },1000);
+  ui.panel.style.borderColor='rgba(120,255,180,0.35)';
+  // user gesture -> unlock audio
+  ensureAudio(true);
+}
+function stopSession(){
+  if(!S.session) return;
+  S.session=false;
+  ui.startSession.disabled=false; ui.stopSession.disabled=true;
+  ui.recDot.style.visibility='hidden'; ui.sessionLabel.textContent='Session Idle';
+  if(S.elapsedId){ clearInterval(S.elapsedId); S.elapsedId=null; }
+  const dur = ((Date.now()-S.startTs)/1000)|0;
+  ui.elapsed.textContent=fmtHHMMSS(dur);
+  ui.panel.style.borderColor='rgba(150,170,255,0.12)';
+  console.log('[Kaleidoscope] Session duration:', fmtHHMMSS(dur));
+  bell(660,0.5);
+}
+
+/* ========= Pomodoro ========= */
+function startPom(s){ stopPom(); S.pomRemain=s; ui.pomDisplay.textContent='Timer: '+fmtMMSS(S.pomRemain);
+  S.pomId=setInterval(()=>{ S.pomRemain--; ui.pomDisplay.textContent='Timer: '+fmtMMSS(S.pomRemain); if(S.pomRemain<=0){ stopPom(); bell(880,1.2);} },1000);}
+function stopPom(){ if(S.pomId){ clearInterval(S.pomId); S.pomId=null; } ui.pomDisplay.textContent='Timer: —'; }
+
+/* ========= Breathing ========= */
+function updateBreathStatus(){
+  let mode='Off';
+  if(S.mic) mode='Mic Sync';
+  else if(S.manual) mode=`Manual ${S.manualPhase==='inhale'?'(Inhale)':'(Exhale)'}`;
+  ui.breathStatus.textContent='Mode: '+mode;
+  ui.manualInhale.disabled=!S.manual;
+  ui.manualMode.textContent='Manual Mode: '+(S.manual?'On':'Off');
+  ui.micToggle.textContent='Mic Sync: '+(S.mic?'On':'Off');
+}
+async function toggleMic(){
+  if(S.mic){ // off
+    if(S.ac){ try{S.ac.close();}catch{} S.ac=null; }
+    if(S.stream){ S.stream.getTracks().forEach(t=>t.stop()); S.stream=null; }
+    S.mic=false; updateBreathStatus(); return;
+  }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    S.stream = stream;
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    if(ac.state==='suspended'){ await ac.resume(); }
+    const src = ac.createMediaStreamSource(stream);
+    const analyser = ac.createAnalyser();
+    analyser.fftSize = 2048; analyser.smoothingTimeConstant=0.9;
+    src.connect(analyser);
+    S.ac=ac; S.analyser=analyser; S.data=new Uint8Array(analyser.fftSize); S.mic=true;
+    (function envLoop(){
+      if(!S.mic || !S.analyser) return;
+      S.analyser.getByteTimeDomainData(S.data);
+      let sum=0; for(let i=0;i<S.data.length;i++){ const v=(S.data[i]-128)/128; sum+=v*v; }
+      const rms = Math.sqrt(sum/S.data.length);
+      S.inhaleEnv = S.inhaleEnv*0.95 + rms*0.05;
+      requestAnimationFrame(envLoop);
+    })();
+  }catch(e){ alert('Microphone denied/unavailable. Use Manual Mode instead.'); }
+  if(S.manual) toggleManual(false);
+  updateBreathStatus();
+}
+function toggleManual(force){
+  const next = (typeof force==='boolean') ? force : !S.manual;
+  S.manual = next;
+  if(S.manual){
+    S.manualPhase='inhale';
+    if(S.manualTimer) clearInterval(S.manualTimer);
+    let phaseMs=0; const inhaleMs=4000, exhaleMs=7000;
+    S.manualTimer=setInterval(()=>{
+      phaseMs += 200;
+      if(S.manualPhase==='inhale' && phaseMs>=inhaleMs){ S.manualPhase='exhale'; phaseMs=0; }
+      else if(S.manualPhase==='exhale' && phaseMs>=exhaleMs){ S.manualPhase='inhale'; phaseMs=0; }
+    },200);
+    if(S.mic){ // never both
+      if(S.ac){ try{S.ac.close();}catch{} S.ac=null; }
+      if(S.stream){ S.stream.getTracks().forEach(t=>t.stop()); S.stream=null; }
+      S.mic=false;
+    }
+  } else { if(S.manualTimer){ clearInterval(S.manualTimer); S.manualTimer=null; } }
+  updateBreathStatus();
+}
+
+/* ========= Safety ========= */
+function updateSafety(){
+  ui.safety.textContent = (S.hz>=40)
+    ? 'WARNING: Gamma (40Hz) enabled — experimental. Stop if uncomfortable.'
+    : 'Pulsed light may trigger seizures in photosensitive people. Avoid entrainment if photosensitive.';
+  tuneAudio(); // keep beats in sync if user changes Hz
+}
+
+/* ========= Audio Engine ========= */
+// Create/ensure one AudioContext chain with optional stereo routing
+function ensureAudio(onUserGesture=false){
+  if(!S.audioCtx){
+    try{
+      S.audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+      S.outGain = S.audioCtx.createGain(); S.outGain.gain.value = S.audioVol;
+      S.outGain.connect(S.audioCtx.destination);
+      S.splitter = S.audioCtx.createChannelSplitter(2);
+      S.merger = S.audioCtx.createChannelMerger(2);
+    }catch(e){ console.warn('AudioContext unavailable'); }
+  }
+  if(!S.audioCtx) return;
+
+  if(onUserGesture && S.audioCtx.state==='suspended'){
+    S.audioCtx.resume();
+  }
+
+  // Stop current nodes before (re)building graph
+  stopAudioNodes();
+
+  switch(S.audioMode){
+    case 'off':
+      renderAudioState(); return;
+    case 'binaural':
+      // two oscillators L/R with split by beat/2 each side
+      S.leftOsc  = S.audioCtx.createOscillator();
+      S.rightOsc = S.audioCtx.createOscillator();
+      const beat = getBeatHz();
+      const half = beat/2;
+      S.leftOsc.frequency.value  = Math.max(40, S.carrier - half);
+      S.rightOsc.frequency.value = Math.max(40, S.carrier + half);
+      const gL = S.audioCtx.createGain(), gR = S.audioCtx.createGain();
+      gL.gain.value = 0.5; gR.gain.value = 0.5;
+      S.leftOsc.connect(gL); S.rightOsc.connect(gR);
+      // route to channels
+      const merger = S.audioCtx.createChannelMerger(2);
+      gL.connect(merger,0,0); gR.connect(merger,0,1);
+      merger.connect(S.outGain);
+      S.leftOsc.start(); S.rightOsc.start();
+      break;
+
+    case 'isochronic':
+      // one oscillator amplitude-modulated by beat (square-ish via clipped sine)
+      S.pureOsc = S.audioCtx.createOscillator(); S.pureOsc.frequency.value = S.carrier;
+      S.gateGain = S.audioCtx.createGain(); S.gateGain.gain.value = 0.0;
+      S.modOsc = S.audioCtx.createOscillator(); S.modOsc.frequency.value = getBeatHz();
+      const modGain = S.audioCtx.createGain(); modGain.gain.value = 0.5;
+      // Use waveshaper to clip sine toward square for sharper pulses (still gentle)
+      const shaper = S.audioCtx.createWaveShaper();
+      shaper.curve = buildClipCurve(0.8); // -1..1 -> clipped
+      S.modOsc.connect(shaper);
+      shaper.connect(modGain);
+      modGain.connect(S.gateGain.gain);
+      S.pureOsc.connect(S.gateGain); S.gateGain.connect(S.outGain);
+      S.pureOsc.start(); S.modOsc.start();
+      break;
+
+    case 'pure':
+      // single tone with gentle frequency modulation by breath + visual pulse
+      S.pureOsc = S.audioCtx.createOscillator(); S.pureOsc.frequency.value = S.carrier;
+      const fm = S.audioCtx.createOscillator(); // low-depth FM
+      S.modOsc = fm;
+      fm.frequency.value = Math.max(0.1, getBeatHz()*0.25); // slow wobble
+      const fmGain = S.audioCtx.createGain(); fmGain.gain.value = Math.min(10, getBeatHz()*0.8); // Hz deviation
+      fm.connect(fmGain);
+      fmGain.connect(S.pureOsc.frequency);
+      const g = S.audioCtx.createGain(); g.gain.value = 1.0;
+      S.pureOsc.connect(g); g.connect(S.outGain);
+      S.pureOsc.start(); fm.start();
+      break;
+  }
+  renderAudioState();
+  tuneAudio(); // set initial freqs
+}
+function stopAudioNodes(){
+  const stopOsc = o=>{ try{ o.stop(); }catch{} };
+  stopOsc(S.leftOsc); stopOsc(S.rightOsc); stopOsc(S.pureOsc); stopOsc(S.modOsc);
+  S.leftOsc=S.rightOsc=S.pureOsc=S.modOsc=null;
+  // gateGain left connected to outGain; harmless when no src
+}
+function renderAudioState(){
+  ui.audioStatus.textContent = `Audio: ${S.audioMode[0].toUpperCase()+S.audioMode.slice(1)} ${S.audioMode==='off'?'':` @ ${S.audioVol*100|0}%`}`;
+}
+function tuneAudio(){
+  // called on Hz/preset changes and on sliders
+  if(!S.audioCtx) return;
+  const beat = getBeatHz();
+  if(S.audioMode==='binaural' && S.leftOsc && S.rightOsc){
+    const half = beat/2;
+    S.leftOsc.frequency.setTargetAtTime(Math.max(40, S.carrier-half), S.audioCtx.currentTime, 0.02);
+    S.rightOsc.frequency.setTargetAtTime(Math.max(40, S.carrier+half), S.audioCtx.currentTime, 0.02);
+  }
+  if(S.audioMode==='isochronic' && S.modOsc){
+    S.modOsc.frequency.setTargetAtTime(beat, S.audioCtx.currentTime, 0.02);
+  }
+  if(S.audioMode==='pure' && S.pureOsc){
+    S.pureOsc.frequency.setTargetAtTime(S.carrier, S.audioCtx.currentTime, 0.02);
+    if(S.modOsc){ S.modOsc.frequency.setTargetAtTime(Math.max(0.1, beat*0.25), S.audioCtx.currentTime, 0.02); }
+  }
+}
+function bell(freq=660, dur=0.7){
+  ensureAudio(true);
+  if(!S.audioCtx) return;
+  try{
+    const o = S.audioCtx.createOscillator(), g = S.audioCtx.createGain();
+    o.type='sine'; o.frequency.value=freq;
+    o.connect(g); g.connect(S.outGain);
+    const t=S.audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.15, t+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.start(t); o.stop(t+dur+0.05);
+  }catch(e){ console.warn('bell failed', e); }
+}
+function buildClipCurve(amount=0.8){
+  const n=1024, curve=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const x = (i/(n-1))*2-1;
+    curve[i] = Math.max(-amount, Math.min(amount, x)) / amount; // soft clip
+  }
+  return curve;
+}
+function getBeatHz(){
+  // Beat priority: user override if >0, else visual Hz (but cap at 40)
+  const override = +ui.beat.value;
+  if(override>0) return Math.min(40, override);
+  return Math.min(40, Math.max(0, +ui.hz.value || 0));
+}
+
+/* ========= Draw ========= */
+function lissajous(u,k,phase,t){
+  const a = 2 + k*0.28, b = 3 + k*0.46;
+  const r = 0.35 + 0.08*Math.sin(t*0.003 + k);
+  return { x: Math.sin(a*u + phase)*r, y: Math.sin(b*u + phase*1.3)*r };
+}
+let frames=0, lastFps=performance.now();
+function maybeAdapt(){
+  frames++;
+  const now=performance.now();
+  if(now - lastFps > 1000){
+    const fps = frames * 1000 / (now - lastFps);
+    if(fps < 45 && S.complexity > 4){ S.complexity--; ui.complexity.value=S.complexity; }
+    frames=0; lastFps=now;
+  }
+}
+function draw(){
+  if(!S.paused) S.t += S.speed;
+  ctx.fillStyle='rgba(5,6,10,0.18)'; ctx.fillRect(0,0,cv.width,cv.height);
+
+  const cx=cv.width/2, cy=cv.height/2, R=Math.min(cv.width,cv.height)*0.44;
+
+  for(let k=0;k<S.complexity;k++){
+    const rot = S.t*0.0006*(k+1);
+    const segs=360;
+    ctx.save(); ctx.translate(cx,cy);
+    for(let p=0;p<S.petals;p++){
+      ctx.save(); ctx.rotate((Math.PI*2/S.petals)*p + rot);
+      ctx.beginPath();
+      for(let i=0;i<=segs;i++){
+        const u=i/segs;
+        const curve=lissajous(u,k,S.t*0.005 + k*0.6,S.t);
+        const r=R*(0.95 - k*0.11)*(0.78 + 0.22*Math.sin((u+k*0.1+S.t*0.001)*Math.PI*2));
+        const x=curve.x*r, y=curve.y*r;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      const color=(palettes[S.palette]||palettes.morning)((k+1)/S.complexity,S.t);
+      ctx.strokeStyle=color; ctx.lineWidth=1.1 + k*0.28; ctx.globalAlpha=0.86 - k*0.08; ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // Visual pulse
+  const depthVisual = (S.hz>=40) ? Math.min(S.depth,0.15) : S.depth; // gamma guardrail
+  let pulse = 1;
+  if(S.hz>0){
+    const sec = S.t*0.02;
+    const s = Math.sin(sec*S.hz*2*Math.PI);
+    pulse = 1 - (1 - (s+1)/2) * (1 - depthVisual);
+  }
+
+  // Breath factor
+  let breath=1.0;
+  if(S.mic){
+    breath = 0.9 + Math.min(0.35, S.inhaleEnv*7);
+  } else if(S.manual){
+    breath = (S.manualPhase==='inhale') ? 1.25 : 0.9;
+  }
+
+  // Brightness overlay
+  const cMid=(palettes[S.palette]||palettes.morning)(0.5,S.t);
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  const g=ctx.createRadialGradient(cx,cy,R*0.1,cx,cy,R*0.95);
+  g.addColorStop(0, cMid.replace('hsl(','hsla(').replace(')',',0.08)'));
+  g.addColorStop(1,'rgba(5,6,10,0)');
+  ctx.fillStyle=g;
+  ctx.globalAlpha=Math.min(0.28*depthVisual*breath,0.28)*pulse;
+  ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.restore();
+
+  // Breathing ring
+  const rBase=R*0.52, r=rBase*(0.85 + 0.35*((pulse+1)/2)*breath);
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.lineWidth=2.6; ctx.strokeStyle=cMid; ctx.globalAlpha=0.9*Math.min(1,depthVisual+0.1);
+  ctx.setLineDash([8,8]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
+
+  // Drive audio FM/AM subtly by visual/breath mix
+  driveAudioDynamics(pulse, breath);
+
+  maybeAdapt();
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* ========= Audio dynamics ========= */
+function driveAudioDynamics(pulse, breath){
+  if(!S.audioCtx || S.audioMode==='off') return;
+  const now = S.audioCtx.currentTime;
+  const beat = getBeatHz();
+
+  // Adjust in real-time without clicks
+  if(S.audioMode==='binaural'){
+    const half = beat/2;
+    if(S.leftOsc && S.rightOsc){
+      S.leftOsc.frequency.setTargetAtTime(Math.max(40, S.carrier-half), now, 0.03);
+      S.rightOsc.frequency.setTargetAtTime(Math.max(40, S.carrier+half), now, 0.03);
+    }
+  } else if(S.audioMode==='isochronic'){
+    if(S.modOsc) S.modOsc.frequency.setTargetAtTime(beat, now, 0.03);
+    if(S.gateGain){
+      // map breath/pulse to duty-ish cycle by gain target
+      const gain = 0.2 + 0.6 * ((pulse+breath)/2 - 0.5 + 0.5); // 0.2..0.8
+      S.gateGain.gain.setTargetAtTime(gain, now, 0.05);
+    }
+  } else if(S.audioMode==='pure'){
+    if(S.pureOsc){
+      // gentle FM by breath/pulse
+      const dev = Math.min(12, 4 + beat*0.2); // Hz deviation
+      const target = S.carrier + dev * (breath-1) + dev*0.3*(pulse-1);
+      S.pureOsc.frequency.setTargetAtTime(Math.max(40,target), now, 0.05);
+    }
+  }
+}
+
+/* ========= Utilities ========= */
+function q(s){ return document.querySelector(s); }
+function fmtMMSS(s){ const m=(s/60|0), ss=(s%60|0).toString().padStart(2,'0'); return `${m}:${ss}`; }
+function fmtHHMMSS(s){ const h=(s/3600|0), m=((s%3600)/60|0).toString().padStart(2,'0'), ss=(s%60|0).toString().padStart(2,'0'); return `${h}:${m}:${ss}`; }
+
+/* ========= Reset/UI ========= */
+function resetAll(){
+  applyPreset('focus');
+  if(S.mic){ toggleMic(); }
+  if(S.manual){ toggleManual(false); }
+  stopPom(); stopSession();
+  S.paused=false;
+  ui.panel.style.borderColor='rgba(150,170,255,0.12)';
+
+  // audio off
+  ui.audioMode.value='off'; S.audioMode='off'; stopAudioNodes(); renderAudioState();
+}
+function uiShow(on){
+  ui.panel.style.display = on?'block':'none';
+  ui.miniHUD.style.display = on?'none':'block';
+}
+
+/* ========= Done ========= */
+updateBreathStatus(); updateSafety();
+ui.audioMode.value='off'; renderAudioState();
+ui.audioVol.value=S.audioVol; ui.carrier.value=S.carrier; ui.beat.value=S.beatOverride;
+</script>
+</body>
+</html>
